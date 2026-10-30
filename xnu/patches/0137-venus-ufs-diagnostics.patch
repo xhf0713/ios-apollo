@@ -1,0 +1,29 @@
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -368,6 +368,26 @@
+ 	if (buf_map(bp, &vaddr)) {
+ 		error = EIO;
+ 		goto done;
+ 	}
+ 
++	/* venus UFS diagnostics (2026-10-30): the public kernel's strategy dies
++	 * with a synchronous external abort inside the bounce copy while
++	 * SpringBoard does file I/O (pc _memmove+0x48, esr 0x96000010).  Log the
++	 * first I/Os and any physical buffer outside the venus DRAM window so the
++	 * panic screen names the culprit. */
++	if (bp->b_flags & B_PHYS) {
++		printf("SWEET UFS: phys io off=0x%llx count=%u data=0x%llx vaddr=%p flags=0x%x\n",
++		    off, count, (uint64_t)(uintptr_t)bp->b_data, vaddr, buf_flags(bp));
++		if (((uint64_t)(uintptr_t)bp->b_data) < 0xc0000000ULL ||
++		    ((uint64_t)(uintptr_t)bp->b_data) + count > 0x100000000ULL) {
++			printf("SWEET UFS: BAD phys buffer data=0x%llx count=%u\n",
++			    (uint64_t)(uintptr_t)bp->b_data, count);
++		}
++	} else {
++		static int sweet_ufs_io_log = 32;
++		if (sweet_ufs_io_log-- > 0)
++			printf("SWEET UFS: io off=0x%llx count=%u data=0x%llx vaddr=%p flags=0x%x\n",
++			    off, count, (uint64_t)(uintptr_t)bp->b_data, vaddr, buf_flags(bp));
++	}
++
+ 	lck_mtx_lock(&sweet_ufs_lock);

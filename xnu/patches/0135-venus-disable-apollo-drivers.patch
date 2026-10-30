@@ -1,0 +1,44 @@
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -657,18 +657,31 @@
+ 	printf("SWEET UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA at 0x%llx\n",
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
+ 	    su.writable ? "read-write" : "read-only", su.dma_pa);
+-	/* CPU clock first: firmware leaves the cores slow (apollo, sweet_cpufreq.c). */
+-	sweet_cpufreq_init();
+-	/* Adreno 650 probe; does nothing without boot-arg sweetgpu=N (sweet_gpu.c). */
+-	sweet_gpu_init();
++	/*
++	 * The patch series was first developed for Apollo (SM8250).  Venus is
++	 * SM8350 with different PMIC, touch, USB, CPU-frequency, GPU and Wi-Fi
++	 * register maps.  Keep the common UFS/log path available, but make the
++	 * Apollo probes opt-in until each Venus driver has a live-DT-backed map.
++	 * This is a safety gate, not a claim that those subsystems work on Venus.
++	 */
++	uint32_t venus = 0;
++	PE_parse_boot_argn("venus", &venus, sizeof(venus));
++	if (venus) {
++		printf("SWEET VENUS: Apollo-specific drivers disabled (venus=1)\n");
++	} else {
++		/* CPU clock first: firmware leaves the cores slow (Apollo). */
++		sweet_cpufreq_init();
++		/* Adreno 650 probe; does nothing without boot-arg sweetgpu=N. */
++		sweet_gpu_init();
++		/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */
++		sweet_keys_init();
++		sweet_touch_init();
++		sweet_usb_probe();
++		/* QCA6390 Wi-Fi bring-up; does nothing without boot-arg sweetwifi=N. */
++		sweet_wifi_init();
++	}
+ 	sweet_log_start();
+ 	sweet_sample_start();
+-	/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */
+-	sweet_keys_init();
+-	sweet_touch_init();
+-	sweet_usb_probe();
+-	/* QCA6390 Wi-Fi bring-up; does nothing without boot-arg sweetwifi=N (sweet_wifi.c). */
+-	sweet_wifi_init();
+ 	return 0;
+ }
+ 
